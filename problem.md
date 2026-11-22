@@ -9,3 +9,9 @@ One problem that I had transferring to DePaul is that I had no experience explor
 - R3: The user can mark areas as explored, which reveals them in colour
 - R4: Explored areas show street names
 - R5: The user's exploration progress is saved between sessions
+
+## Round 2 requirements
+
+- R1 (changed): The map displays the real street layout of downtown Chicago (the Loop, South Loop, and Near West Side), not a synthetic 10x10 grid. It still renders in grayscale until explored.
+- R6: The explorable unit is a real street segment — the stretch of an actual street between two real cross streets — sourced from a bundled local copy of Chicago's street-centerline data (no live API, downloaded once and committed to the repo).
+- R7: The map shows the entire chosen area at a fixed scale; panning and zooming are not supported.
