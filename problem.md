@@ -21,3 +21,10 @@ One problem that I had transferring to DePaul is that I had no experience explor
 - R8: The map shows a handful of famous real landmarks (e.g. the Rookery Building, Union Station, the Chicago Theatre) to help users orient themselves. Landmarks are visual reference points only — they are not explorable and are always visible, regardless of exploration progress.
 - R9: The map shows real CTA 'L' station locations, color-coded by the line(s) that serve each one. Like landmarks, stations are reference points only — not explorable, always visible.
 - R10: Real park spaces (Grant Park and the South Loop's small pocket parks) are filled in on the map, same as the lake, so green space doesn't read as empty/missing area. Decorative only — not explorable.
+
+## Round 4 requirements
+
+- R11: The user can pin any segment they've already explored as a "place" (e.g. somewhere to eat, shop, or chill). A segment that hasn't been explored yet cannot be pinned.
+- R12: A pinned place can be rated 1-5 stars.
+- R13: A pinned place's rating can be changed, and a pin can be removed entirely, at any time after it's created.
+- R14: Pinned places, their ratings, and whether each is still pinned are saved and loaded between sessions, same as exploration progress (R5).
