@@ -73,3 +73,22 @@ canvas {
   color: #f5a623;
   padding: 0 2px;
 }
+
+#placePanel .categories {
+  display: block;
+  margin-top: 6px;
+}
+
+#placePanel .categories button {
+  font-size: 0.85rem;
+  background: #2a2a2a;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 6px;
+}
+
+#placePanel .categories button.active {
+  background: #145dc4;
+  border-color: #145dc4;
+  color: #fff;
+}

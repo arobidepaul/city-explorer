@@ -2,6 +2,7 @@ import { SEGMENTS, RIVER, LAKE_MICHIGAN_SHORELINE, LAKE_MICHIGAN_BREAKWATERS, PA
 import {
   createState, setStartLocation, markExplored, isExplored,
   pinPlace, unpinPlace, isPinned, ratePlace, ratingFor, pinnedPlaces,
+  categorizePlace, categoryFor, CATEGORIES,
   serializeState, deserializeState,
 } from "./cityState.js";
 
@@ -428,12 +429,13 @@ function renderPlacesList() {
     const stars = place.rating === null
       ? "unrated"
       : "★".repeat(place.rating) + "☆".repeat(5 - place.rating);
+    const category = place.category ?? "uncategorized";
 
     const item = document.createElement("li");
     const button = document.createElement("button");
     button.textContent = names
-      ? `${names.street} (${names.crossFrom ?? "?"} to ${names.crossTo ?? "?"}) — ${stars}`
-      : `${place.id} — ${stars}`;
+      ? `${names.street} (${names.crossFrom ?? "?"} to ${names.crossTo ?? "?"}) — ${stars} — ${category}`
+      : `${place.id} — ${stars} — ${category}`;
     button.addEventListener("click", () => {
       selectedId = place.id;
       render();
@@ -489,6 +491,22 @@ function renderPanel() {
     stars.appendChild(starButton);
   }
   placePanel.appendChild(stars);
+
+  const currentCategory = categoryFor(state, selectedId);
+  const categories = document.createElement("div");
+  categories.className = "categories";
+  for (const category of CATEGORIES) {
+    const categoryButton = document.createElement("button");
+    categoryButton.textContent = category;
+    categoryButton.className = category === currentCategory ? "active" : "";
+    categoryButton.addEventListener("click", () => {
+      state = categorizePlace(state, selectedId, category);
+      saveState(state);
+      render();
+    });
+    categories.appendChild(categoryButton);
+  }
+  placePanel.appendChild(categories);
 
   const unpinButton = document.createElement("button");
   unpinButton.textContent = "Remove pin";
