@@ -39,3 +39,7 @@ One problem that I had transferring to DePaul is that I had no experience explor
 
 - R18: The user can deselect the currently selected place, closing its panel, without removing the pin or selecting a different place.
 - R19: The "My places" list can be filtered to show only places in one chosen category, or all categories (the default, showing everything).
+
+## Round 7 requirements
+
+- R20: The user can un-explore a segment that is currently explored, reverting it to unexplored, as long as it is not the start location and not currently pinned.
