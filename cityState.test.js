@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createState, setStartLocation, markExplored, isExplored,
   pinPlace, unpinPlace, isPinned, ratePlace, ratingFor, pinnedPlaces,
+  categorizePlace, categoryFor, CATEGORIES,
   serializeState, deserializeState,
 } from "./cityState.js";
 import {
@@ -244,4 +245,85 @@ test("pinnedPlaces excludes unpinned segments", () => {
   state = markExplored(state, segmentB.id);
   state = pinPlace(state, segmentA.id);
   assert.deepEqual(pinnedPlaces(state).map((place) => place.id), [segmentA.id]);
+});
+
+test("R15: a newly-pinned place starts uncategorized", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  assert.equal(categoryFor(state, segmentA.id), null);
+});
+
+test("R15: a pinned place can be assigned a category", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = categorizePlace(state, segmentA.id, "food");
+  assert.equal(categoryFor(state, segmentA.id), "food");
+});
+
+test("R15: categorizing accepts only the known categories", () => {
+  for (const category of CATEGORIES) {
+    let state = createState();
+    state = markExplored(state, segmentA.id);
+    state = pinPlace(state, segmentA.id);
+    state = categorizePlace(state, segmentA.id, category);
+    assert.equal(categoryFor(state, segmentA.id), category);
+  }
+});
+
+test("R15: an unknown category is rejected", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = categorizePlace(state, segmentA.id, "nonsense");
+  assert.equal(categoryFor(state, segmentA.id), null);
+});
+
+test("R15: a place that isn't pinned cannot be categorized", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = categorizePlace(state, segmentA.id, "food");
+  assert.equal(categoryFor(state, segmentA.id), null);
+});
+
+test("R15: categorizing a place does not disturb its rating", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = ratePlace(state, segmentA.id, 4);
+  state = categorizePlace(state, segmentA.id, "food");
+  assert.equal(ratingFor(state, segmentA.id), 4);
+  assert.equal(categoryFor(state, segmentA.id), "food");
+});
+
+test("R16: a pinned place's category can be changed at any time", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = categorizePlace(state, segmentA.id, "food");
+  state = categorizePlace(state, segmentA.id, "park");
+  assert.equal(categoryFor(state, segmentA.id), "park");
+});
+
+test("R16: rating a place does not disturb its category", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = categorizePlace(state, segmentA.id, "shopping");
+  state = ratePlace(state, segmentA.id, 2);
+  assert.equal(categoryFor(state, segmentA.id), "shopping");
+});
+
+test("R17: serializing and deserializing round-trips a place's category", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = categorizePlace(state, segmentA.id, "photo spot");
+  state = markExplored(state, segmentB.id);
+  state = pinPlace(state, segmentB.id);
+  const json = serializeState(state);
+  const restored = deserializeState(json);
+  assert.equal(categoryFor(restored, segmentA.id), "photo spot");
+  assert.equal(categoryFor(restored, segmentB.id), null);
 });

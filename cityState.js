@@ -5,6 +5,9 @@ export function createState() {
   return { explored: new Set(), start: null, pins: new Map() };
 }
 
+// R15: the fixed set of categories a pinned place can be assigned to.
+export const CATEGORIES = ["food", "shopping", "park", "photo spot", "other"];
+
 // R2: starting location can only be set once per game.
 export function setStartLocation(state, id) {
   if (state.start !== null) return state;
@@ -30,7 +33,7 @@ export function isExplored(state, id) {
 export function pinPlace(state, id) {
   if (!state.explored.has(id) || state.pins.has(id)) return state;
   const pins = new Map(state.pins);
-  pins.set(id, { rating: null });
+  pins.set(id, { rating: null, category: null });
   return { ...state, pins };
 }
 
@@ -53,7 +56,7 @@ export function ratePlace(state, id, rating) {
   if (!state.pins.has(id)) return state;
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) return state;
   const pins = new Map(state.pins);
-  pins.set(id, { rating });
+  pins.set(id, { ...pins.get(id), rating });
   return { ...state, pins };
 }
 
@@ -62,10 +65,25 @@ export function ratingFor(state, id) {
   return pin ? pin.rating : null;
 }
 
+// R15/R16: assign (or change) a pinned place's category. Only a pinned
+// place can be categorized, and only to one of CATEGORIES.
+export function categorizePlace(state, id, category) {
+  if (!state.pins.has(id)) return state;
+  if (!CATEGORIES.includes(category)) return state;
+  const pins = new Map(state.pins);
+  pins.set(id, { ...pins.get(id), category });
+  return { ...state, pins };
+}
+
+export function categoryFor(state, id) {
+  const pin = state.pins.get(id);
+  return pin ? pin.category : null;
+}
+
 // All pinned places, highest-rated first (unrated places last).
 export function pinnedPlaces(state) {
   return [...state.pins.entries()]
-    .map(([id, pin]) => ({ id, rating: pin.rating }))
+    .map(([id, pin]) => ({ id, rating: pin.rating, category: pin.category }))
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
 }
 
