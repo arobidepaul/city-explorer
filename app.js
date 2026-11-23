@@ -110,6 +110,10 @@ let state = loadState();
 // explored) to pin, unpin, or rate. UI-only; never persisted.
 let selectedId = null;
 
+// R19: which category "My places" is filtered to, or null for every
+// category (the default). UI-only; never persisted.
+let placesFilter = null;
+
 const LABEL_FONT = "600 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const LANDMARK_FONT = "italic 600 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const STATION_FONT = "600 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -416,12 +420,44 @@ function render() {
 function renderPlacesList() {
   placesList.replaceChildren();
 
-  const places = pinnedPlaces(state);
-  if (places.length === 0) return;
+  if (state.pins.size === 0) return;
 
   const heading = document.createElement("h2");
   heading.textContent = "My places";
   placesList.appendChild(heading);
+
+  // R19: filter controls -- "All" plus one button per category. Shown
+  // whenever there's at least one pin, even if the current filter happens
+  // to match none of them, so the user can switch back.
+  const filters = document.createElement("div");
+  filters.className = "filters";
+  const allButton = document.createElement("button");
+  allButton.textContent = "All";
+  allButton.className = placesFilter === null ? "active" : "";
+  allButton.addEventListener("click", () => {
+    placesFilter = null;
+    render();
+  });
+  filters.appendChild(allButton);
+  for (const category of CATEGORIES) {
+    const filterButton = document.createElement("button");
+    filterButton.textContent = category;
+    filterButton.className = category === placesFilter ? "active" : "";
+    filterButton.addEventListener("click", () => {
+      placesFilter = category;
+      render();
+    });
+    filters.appendChild(filterButton);
+  }
+  placesList.appendChild(filters);
+
+  const places = pinnedPlaces(state, placesFilter);
+  if (places.length === 0) {
+    const empty = document.createElement("p");
+    empty.textContent = "No places in this category.";
+    placesList.appendChild(empty);
+    return;
+  }
 
   const list = document.createElement("ul");
   for (const place of places) {
@@ -464,6 +500,16 @@ function renderPanel() {
     ? `${names.street} (${names.crossFrom ?? "?"} to ${names.crossTo ?? "?"})`
     : selectedId;
   placePanel.appendChild(title);
+
+  // R18: deselect without unpinning or selecting something else -- just
+  // closes this panel.
+  const closeButton = document.createElement("button");
+  closeButton.textContent = "Close";
+  closeButton.addEventListener("click", () => {
+    selectedId = null;
+    render();
+  });
+  placePanel.appendChild(closeButton);
 
   if (!isPinned(state, selectedId)) {
     const pinButton = document.createElement("button");
