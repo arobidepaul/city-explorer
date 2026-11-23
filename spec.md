@@ -117,3 +117,13 @@ No change to `serializeState`/`deserializeState` was needed: both already carry 
 
 ### UI: categorizing in the panel
 The pin/rate/unpin panel (`app.js`) gains a row of category buttons below the star rating, one per `CATEGORIES` entry, with the current category (if any) highlighted. Clicking one calls `categorizePlace` and re-renders, the same pattern the star buttons already use for `ratePlace`. The "My places" list also shows each place's category (or "uncategorized") next to its star rating.
+
+## Round 6 (covers R18, R19)
+
+### R18 - Deselect the selected place
+The pin/rate/unpin panel gains a "Close" button, shown whenever a place is selected (pinned or not). Clicking it sets `selectedId` back to `null` and re-renders, same as the existing selection logic in R11 -- it doesn't touch `state` at all, so the pin, its rating, and its category are all untouched. Purely UI state (`selectedId` was already UI-only, not part of `cityState`'s persisted state), so same test exemption as the rest of R11's panel wiring.
+
+### R19 - Filter "My places" by category
+`pinnedPlaces(state, category)` in `cityState.js` gains an optional second argument: `null` (the default, omit it entirely) returns every pinned place as before; passing one of `CATEGORIES` filters the results to only places with that category, keeping the existing highest-rated-first sort. This is core list-selection logic, so it's unit tested the same way the existing sort/exclude behavior already was.
+
+`app.js` tracks `placesFilter`, a second piece of UI-only state (not persisted, same treatment as `selectedId`) holding the currently chosen category or `null` for "all." The "My places" list gets a row of filter buttons -- "All" plus one per `CATEGORIES` entry, with the active one highlighted -- above the list itself; clicking one sets `placesFilter` and re-renders. If the chosen filter matches no pinned places, the list shows "No places in this category." instead of silently appearing empty, so it's clear the filter (not a bug) is why nothing's shown. The filter controls still appear in that case (as long as at least one place is pinned at all) so the user can switch back without digging for a reset.
