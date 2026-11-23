@@ -100,3 +100,20 @@ Pinned segments get a small gold marker (the rating, or "?" while unrated) drawn
 
 ### UI: "My places" list
 Below the map, `#placesList` lists every pinned place via `pinnedPlaces(state)` -- a `cityState.js` helper (ordering is logic, so it lives there, not in the renderer) that returns pinned places sorted highest-rated first, unrated last. Each entry is a button showing the street and cross streets with its star rating; clicking one sets `selectedId` to that place, opening the same pin/rate/unpin panel a canvas click would. Not a numbered requirement on its own -- a usability addition on top of R11-R13 so a user with several pins can review and manage them without re-finding each one on the map.
+
+## Round 5 (covers R15-R17)
+
+### City model
+Each entry in `pins` gains a `category` field alongside `rating`: `null` while uncategorized, or one of `cityState.js`'s exported `CATEGORIES` (`"food"`, `"shopping"`, `"park"`, `"photo spot"`, `"other"`) once assigned.
+
+### R15 - Assign a category to a pinned place
+`categorizePlace(state, id, category)` sets `pins.get(id).category`. It's a no-op if `id` isn't pinned (same rule as `ratePlace`), or if `category` isn't one of `CATEGORIES`. `pinPlace` now creates a pin with `category: null`, so every newly-pinned place starts uncategorized. `categoryFor(state, id)` returns the current category, or `null` if uncategorized or unpinned.
+
+### R16 - Change a category at any time
+`categorizePlace` can be called again on an already-categorized place to change it, the same repeatable-action shape as `ratePlace` (R13) -- rating and categorizing a place are independent fields on the same pin, and setting either one leaves the other untouched.
+
+### R17 - Categories saved and loaded between sessions
+No change to `serializeState`/`deserializeState` was needed: both already carry each pin's full object (`[...state.pins]`), so `category` rides along with `rating` automatically, the same JSON round-trip R14 already established.
+
+### UI: categorizing in the panel
+The pin/rate/unpin panel (`app.js`) gains a row of category buttons below the star rating, one per `CATEGORIES` entry, with the current category (if any) highlighted. Clicking one calls `categorizePlace` and re-renders, the same pattern the star buttons already use for `ratePlace`. The "My places" list also shows each place's category (or "uncategorized") next to its star rating.
