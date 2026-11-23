@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  createState, setStartLocation, markExplored, isExplored,
+  createState, setStartLocation, markExplored, isExplored, unexploreSegment,
   pinPlace, unpinPlace, isPinned, ratePlace, ratingFor, pinnedPlaces,
   categorizePlace, categoryFor, CATEGORIES,
   serializeState, deserializeState,
@@ -354,6 +354,48 @@ test("R19: filtering by category still sorts highest-rated first", () => {
   // segmentC is left unrated.
   const ids = pinnedPlaces(state, "food").map((place) => place.id);
   assert.deepEqual(ids, [segmentB.id, segmentA.id, segmentC.id]);
+});
+
+test("R20: an explored segment can be reverted to unexplored", () => {
+  let state = createState();
+  state = setStartLocation(state, segmentA.id);
+  state = markExplored(state, segmentB.id);
+  state = unexploreSegment(state, segmentB.id);
+  assert.ok(!isExplored(state, segmentB.id));
+});
+
+test("R20: an unexplored segment is a no-op", () => {
+  let state = createState();
+  state = setStartLocation(state, segmentA.id);
+  state = unexploreSegment(state, segmentB.id);
+  assert.ok(!isExplored(state, segmentB.id));
+  assert.equal(state.explored.size, 1);
+});
+
+test("R20: the start location cannot be un-explored", () => {
+  let state = createState();
+  state = setStartLocation(state, segmentA.id);
+  state = unexploreSegment(state, segmentA.id);
+  assert.ok(isExplored(state, segmentA.id));
+  assert.equal(state.start, segmentA.id);
+});
+
+test("R20: a pinned place cannot be un-explored", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = unexploreSegment(state, segmentA.id);
+  assert.ok(isExplored(state, segmentA.id));
+  assert.ok(isPinned(state, segmentA.id));
+});
+
+test("R20: unpinning first allows un-exploring afterward", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = unpinPlace(state, segmentA.id);
+  state = unexploreSegment(state, segmentA.id);
+  assert.ok(!isExplored(state, segmentA.id));
 });
 
 test("R17: serializing and deserializing round-trips a place's category", () => {

@@ -27,6 +27,19 @@ export function isExplored(state, id) {
   return state.explored.has(id);
 }
 
+// R20: revert an explored segment back to unexplored. No-op if it isn't
+// explored, is the start location (always explored, R2), or is currently
+// pinned (a pin's segment can't disappear out from under its rating/category
+// -- it must be unpinned first via unpinPlace).
+export function unexploreSegment(state, id) {
+  if (!state.explored.has(id) || id === state.start || state.pins.has(id)) {
+    return state;
+  }
+  const explored = new Set(state.explored);
+  explored.delete(id);
+  return { ...state, explored };
+}
+
 // R11: pin an already-explored segment as a place. A segment that hasn't
 // been explored yet cannot be pinned. Pinning an already-pinned segment is a
 // no-op so it never resets an existing rating.
