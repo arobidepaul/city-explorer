@@ -80,10 +80,13 @@ export function categoryFor(state, id) {
   return pin ? pin.category : null;
 }
 
-// All pinned places, highest-rated first (unrated places last).
-export function pinnedPlaces(state) {
+// All pinned places, highest-rated first (unrated places last). R19: pass
+// one of CATEGORIES to show only places in that category; omit (or pass
+// null) for the default "all categories" view.
+export function pinnedPlaces(state, category = null) {
   return [...state.pins.entries()]
     .map(([id, pin]) => ({ id, rating: pin.rating, category: pin.category }))
+    .filter((place) => category === null || place.category === category)
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
 }
 

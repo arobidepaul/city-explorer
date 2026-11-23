@@ -315,6 +315,47 @@ test("R16: rating a place does not disturb its category", () => {
   assert.equal(categoryFor(state, segmentA.id), "shopping");
 });
 
+test("R19: pinnedPlaces with no filter shows every category (the default)", () => {
+  let state = createState();
+  for (const segment of [segmentA, segmentB, segmentC]) {
+    state = markExplored(state, segment.id);
+    state = pinPlace(state, segment.id);
+  }
+  state = categorizePlace(state, segmentA.id, "food");
+  state = categorizePlace(state, segmentB.id, "park");
+  // segmentC is left uncategorized.
+  const ids = pinnedPlaces(state).map((place) => place.id).sort();
+  assert.deepEqual(ids, [segmentA.id, segmentB.id, segmentC.id].sort());
+});
+
+test("R19: pinnedPlaces can be filtered to one category", () => {
+  let state = createState();
+  for (const segment of [segmentA, segmentB, segmentC]) {
+    state = markExplored(state, segment.id);
+    state = pinPlace(state, segment.id);
+  }
+  state = categorizePlace(state, segmentA.id, "food");
+  state = categorizePlace(state, segmentB.id, "park");
+  // segmentC is left uncategorized.
+  assert.deepEqual(pinnedPlaces(state, "food").map((place) => place.id), [segmentA.id]);
+  assert.deepEqual(pinnedPlaces(state, "park").map((place) => place.id), [segmentB.id]);
+  assert.deepEqual(pinnedPlaces(state, "shopping"), []);
+});
+
+test("R19: filtering by category still sorts highest-rated first", () => {
+  let state = createState();
+  for (const segment of [segmentA, segmentB, segmentC]) {
+    state = markExplored(state, segment.id);
+    state = pinPlace(state, segment.id);
+    state = categorizePlace(state, segment.id, "food");
+  }
+  state = ratePlace(state, segmentA.id, 2);
+  state = ratePlace(state, segmentB.id, 5);
+  // segmentC is left unrated.
+  const ids = pinnedPlaces(state, "food").map((place) => place.id);
+  assert.deepEqual(ids, [segmentB.id, segmentA.id, segmentC.id]);
+});
+
 test("R17: serializing and deserializing round-trips a place's category", () => {
   let state = createState();
   state = markExplored(state, segmentA.id);
