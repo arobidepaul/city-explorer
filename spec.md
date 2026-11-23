@@ -75,3 +75,28 @@ Canvas drawing has no z-index, only paint order, so a label painted after a dot 
 `cityData.js` exports `STATIONS` (`{ name, lon, lat, lines }`, one entry per physical station, `lines` the union of every CTA line serving it) and `CTA_LINE_COLORS` (the official color per line). Sourced once from the City of Chicago's "CTA - 'L' (Rail) Stations" dataset (Socrata resource id `3tzw-cg4m`), filtered to stations inside `BOUNDS`.
 
 `app.js` draws each station as a small circle split into one colored wedge per line it serves (a solid circle when there's only one), so a hub like Clark/Lake reads at a glance as a multi-line station the same way a real transit map would show it. Same reference-point treatment as landmarks: always visible, not explorable, no id.
+
+## Round 4 (covers R11-R14)
+
+### City model
+`cityState.js`'s state gains `pins`, a `Map` from segment id to `{ rating }`, alongside the existing `explored` Set and `start`. A segment's presence as a key in `pins` means it's pinned; `rating` is `1`-`5` once rated, or `null` while pinned but not yet rated.
+
+### R11 - Pin an explored place
+`pinPlace(state, id)` adds `id` to `pins` with `rating: null`. It's a no-op if `id` isn't in `explored` (an unexplored segment can't be pinned) or if it's already pinned (so re-pinning never clobbers an existing rating). `isPinned(state, id)` checks membership.
+
+### R12 - Rate a pinned place 1-5 stars
+`ratePlace(state, id, rating)` sets `pins.get(id).rating`. It's a no-op if `id` isn't pinned, or if `rating` isn't an integer `1`-`5`. `ratingFor(state, id)` returns the current rating, or `null` if unrated or unpinned.
+
+### R13 - Change or remove a pin at any time
+`ratePlace` can be called again on an already-rated place to change its rating. `unpinPlace(state, id)` removes `id` from `pins` entirely, discarding its rating; pinning the same segment again afterward starts out unrated, same as a brand-new pin.
+
+### R14 - Pins saved and loaded between sessions
+`serializeState`/`deserializeState` carry `pins` as an array of `[id, { rating }]` entries (a `Map`'s own spread form), alongside `explored` and `start`, same JSON-round-trip approach as R5.
+
+### UI: selecting a segment to pin/rate
+`app.js` tracks `selectedId`, which segment (if any) the pin/rate/unpin panel below the canvas refers to. This is UI-only, not part of `cityState`'s persisted state, same treatment as the projection math in R7 — not unit tested. Clicking an already-explored segment sets `selectedId` instead of re-marking it explored (previously a no-op anyway); clicking an unexplored one still sets the start location or explores it as before. The panel shows a "Pin this place" button for an unpinned selection, or five star-toggle buttons plus "Remove pin" for a pinned one.
+
+Pinned segments get a small gold marker (the rating, or "?" while unrated) drawn at their midpoint in the same final layer as landmark dots and station markers, so it's never lost under a road or label; a rect around each is reserved in `placedLabelRects` before street labels are placed, same two-pass approach R8/R9 already established, so a street name never overlaps a pin marker. The selected segment also gets a dashed gold highlight stroke so it's clear which segment the panel below refers to.
+
+### UI: "My places" list
+Below the map, `#placesList` lists every pinned place via `pinnedPlaces(state)` -- a `cityState.js` helper (ordering is logic, so it lives there, not in the renderer) that returns pinned places sorted highest-rated first, unrated last. Each entry is a button showing the street and cross streets with its star rating; clicking one sets `selectedId` to that place, opening the same pin/rate/unpin panel a canvas click would. Not a numbered requirement on its own -- a usability addition on top of R11-R13 so a user with several pins can review and manage them without re-finding each one on the map.
