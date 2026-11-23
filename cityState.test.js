@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createState, setStartLocation, markExplored, isExplored,
+  pinPlace, unpinPlace, isPinned, ratePlace, ratingFor, pinnedPlaces,
   serializeState, deserializeState,
 } from "./cityState.js";
 import {
@@ -122,4 +123,125 @@ test("R10: every park is one or more rings of real coordinates", () => {
       }
     }
   }
+});
+
+test("R11: an unexplored segment cannot be pinned", () => {
+  let state = createState();
+  state = pinPlace(state, segmentA.id);
+  assert.ok(!isPinned(state, segmentA.id));
+});
+
+test("R11: an explored segment can be pinned", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  assert.ok(isPinned(state, segmentA.id));
+});
+
+test("R11: pinning an already-pinned segment does not reset its rating", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = ratePlace(state, segmentA.id, 4);
+  state = pinPlace(state, segmentA.id);
+  assert.equal(ratingFor(state, segmentA.id), 4);
+});
+
+test("R12: a pinned place can be rated 1-5", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = ratePlace(state, segmentA.id, 5);
+  assert.equal(ratingFor(state, segmentA.id), 5);
+});
+
+test("R12: an out-of-range or non-integer rating is rejected", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  for (const bad of [0, 6, 2.5, -1]) {
+    const next = ratePlace(state, segmentA.id, bad);
+    assert.equal(ratingFor(next, segmentA.id), null);
+  }
+});
+
+test("R12: a place that isn't pinned cannot be rated", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = ratePlace(state, segmentA.id, 3);
+  assert.equal(ratingFor(state, segmentA.id), null);
+  assert.ok(!isPinned(state, segmentA.id));
+});
+
+test("R13: a pinned place's rating can be changed", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = ratePlace(state, segmentA.id, 2);
+  state = ratePlace(state, segmentA.id, 5);
+  assert.equal(ratingFor(state, segmentA.id), 5);
+});
+
+test("R13: a pin can be removed entirely", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = ratePlace(state, segmentA.id, 3);
+  state = unpinPlace(state, segmentA.id);
+  assert.ok(!isPinned(state, segmentA.id));
+  assert.equal(ratingFor(state, segmentA.id), null);
+});
+
+test("R13: re-pinning after removal starts out unrated", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  state = ratePlace(state, segmentA.id, 3);
+  state = unpinPlace(state, segmentA.id);
+  state = pinPlace(state, segmentA.id);
+  assert.ok(isPinned(state, segmentA.id));
+  assert.equal(ratingFor(state, segmentA.id), null);
+});
+
+test("R14: serializing and deserializing round-trips pins and ratings", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = markExplored(state, segmentB.id);
+  state = pinPlace(state, segmentA.id);
+  state = ratePlace(state, segmentA.id, 4);
+  state = pinPlace(state, segmentB.id);
+  const json = serializeState(state);
+  const restored = deserializeState(json);
+  assert.ok(isPinned(restored, segmentA.id));
+  assert.equal(ratingFor(restored, segmentA.id), 4);
+  assert.ok(isPinned(restored, segmentB.id));
+  assert.equal(ratingFor(restored, segmentB.id), null);
+  assert.ok(!isPinned(restored, segmentC.id));
+});
+
+test("R14: a fresh deserialized state's pins is a real Map, not an array", () => {
+  const json = serializeState(createState());
+  const restored = deserializeState(json);
+  assert.ok(restored.pins instanceof Map);
+});
+
+test("pinnedPlaces lists pinned places highest-rated first, unrated last", () => {
+  let state = createState();
+  for (const segment of [segmentA, segmentB, segmentC]) {
+    state = markExplored(state, segment.id);
+    state = pinPlace(state, segment.id);
+  }
+  state = ratePlace(state, segmentA.id, 2);
+  state = ratePlace(state, segmentB.id, 5);
+  // segmentC is left unrated.
+  const ids = pinnedPlaces(state).map((place) => place.id);
+  assert.deepEqual(ids, [segmentB.id, segmentA.id, segmentC.id]);
+});
+
+test("pinnedPlaces excludes unpinned segments", () => {
+  let state = createState();
+  state = markExplored(state, segmentA.id);
+  state = markExplored(state, segmentB.id);
+  state = pinPlace(state, segmentA.id);
+  assert.deepEqual(pinnedPlaces(state).map((place) => place.id), [segmentA.id]);
 });
