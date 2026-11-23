@@ -34,3 +34,8 @@ One problem that I had transferring to DePaul is that I had no experience explor
 - R15: A pinned place can be assigned a category: food, shopping, park, photo spot, or other. A newly-pinned place starts uncategorized.
 - R16: A pinned place's category can be changed at any time, same as its rating (R13).
 - R17: A pinned place's category is saved and loaded between sessions, same as its rating (R14).
+
+## Round 6 requirements
+
+- R18: The user can deselect the currently selected place, closing its panel, without removing the pin or selecting a different place.
+- R19: The "My places" list can be filtered to show only places in one chosen category, or all categories (the default, showing everything).
