@@ -42,7 +42,7 @@ The raw dataset breaks each street at every real-world node, including minor all
 `app.js` strokes each segment's real polyline on the canvas instead of filling a uniform grid cell. Unexplored segments are gray; explored segments are colored, same as Round 1's grid cells.
 
 ### R7 - Fixed scale, no pan/zoom
-`app.js` computes one projection from `BOUNDS` (the data's lon/lat bounding box) to canvas pixels on load: an equirectangular projection corrected for longitude compression at this latitude (`cos(avgLat)`), scaled uniformly so the entire bounding box fits inside the fixed-size canvas with padding. There are no pan or zoom controls or transforms applied after that.
+`app.js` computes one projection from `BOUNDS` (the data's lon/lat bounding box) to canvas pixels on load: an equirectangular projection corrected for longitude compression at this latitude (`cos(avgLat)`), scaled uniformly so the entire bounding box fits inside the fixed-size canvas with padding. There are no pan or zoom controls or transforms applied after that. This is rendering/layout only (the projection is a closure over the DOM `canvas` element, same as the rest of `app.js`); not unit tested, same as R1's Round 1 note.
 
 ### R4, revisited - Street names on explored segments
 `streetNamesFor(id)` now returns `{ street, crossFrom, crossTo }` for a segment instead of two grid-derived cross streets. `app.js` only labels explored segments, same as Round 1.
