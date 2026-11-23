@@ -28,3 +28,9 @@ One problem that I had transferring to DePaul is that I had no experience explor
 - R12: A pinned place can be rated 1-5 stars.
 - R13: A pinned place's rating can be changed, and a pin can be removed entirely, at any time after it's created.
 - R14: Pinned places, their ratings, and whether each is still pinned are saved and loaded between sessions, same as exploration progress (R5).
+
+## Round 5 requirements
+
+- R15: A pinned place can be assigned a category: food, shopping, park, photo spot, or other. A newly-pinned place starts uncategorized.
+- R16: A pinned place's category can be changed at any time, same as its rating (R13).
+- R17: A pinned place's category is saved and loaded between sessions, same as its rating (R14).
