@@ -1,6 +1,6 @@
 import { SEGMENTS, RIVER, LAKE_MICHIGAN_SHORELINE, LAKE_MICHIGAN_BREAKWATERS, PARKS, LANDMARKS, STATIONS, CTA_LINE_COLORS, BOUNDS, streetNamesFor } from "./cityData.js";
 import {
-  createState, setStartLocation, markExplored, isExplored,
+  createState, setStartLocation, markExplored, isExplored, unexploreSegment,
   pinPlace, unpinPlace, isPinned, ratePlace, ratingFor, pinnedPlaces,
   categorizePlace, categoryFor, CATEGORIES,
   serializeState, deserializeState,
@@ -520,6 +520,22 @@ function renderPanel() {
       render();
     });
     placePanel.appendChild(pinButton);
+
+    // R20: an unpinned, explored segment that isn't the start location can
+    // be reverted to unexplored. The start location and pinned places don't
+    // get this button at all, matching the checks unexploreSegment itself
+    // makes, so it never appears only to silently no-op when clicked.
+    if (selectedId !== state.start) {
+      const unexploreButton = document.createElement("button");
+      unexploreButton.textContent = "Un-explore this street";
+      unexploreButton.addEventListener("click", () => {
+        state = unexploreSegment(state, selectedId);
+        selectedId = null;
+        saveState(state);
+        render();
+      });
+      placePanel.appendChild(unexploreButton);
+    }
     return;
   }
 
