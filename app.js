@@ -1,6 +1,7 @@
 import { SEGMENTS, RIVER, LAKE_MICHIGAN_SHORELINE, LAKE_MICHIGAN_BREAKWATERS, PARKS, LANDMARKS, STATIONS, CTA_LINE_COLORS, BOUNDS, streetNamesFor } from "./cityData.js";
 import {
   createState, setStartLocation, markExplored, isExplored,
+  pinPlace, unpinPlace, isPinned, ratePlace, ratingFor, pinnedPlaces,
   serializeState, deserializeState,
 } from "./cityState.js";
 
@@ -8,6 +9,8 @@ const STORAGE_KEY = "city-explorer-state";
 const canvas = document.getElementById("map");
 const ctx = canvas.getContext("2d");
 const status = document.getElementById("status");
+const placePanel = document.getElementById("placePanel");
+const placesList = document.getElementById("placesList");
 
 // R7: the whole area is shown at a fixed scale, no pan/zoom. Project lon/lat
 // to canvas pixels once, correcting for longitude compression at this
@@ -102,6 +105,10 @@ function saveState(state) {
 
 let state = loadState();
 
+// R11: a segment the user has selected (by clicking it after it's already
+// explored) to pin, unpin, or rate. UI-only; never persisted.
+let selectedId = null;
+
 const LABEL_FONT = "600 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const LANDMARK_FONT = "italic 600 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const STATION_FONT = "600 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -122,6 +129,24 @@ function drawStationMarker(x, y, lines) {
   ctx.lineWidth = 1.2;
   ctx.strokeStyle = "#ffffff";
   ctx.stroke();
+}
+
+// R11/R12: a pinned place's marker. Filled gold with the star count, or a
+// bare "?" while it's pinned but not yet rated.
+function drawPinMarker(x, y, rating) {
+  ctx.beginPath();
+  ctx.arc(x, y, 7, 0, Math.PI * 2);
+  ctx.fillStyle = "#f5a623";
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke();
+  ctx.font = "700 9px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#3a2600";
+  ctx.fillText(rating === null ? "?" : String(rating), x, y + 0.5);
+  ctx.textAlign = "left";
 }
 
 function rectsOverlap(a, b) {
@@ -261,6 +286,11 @@ function render() {
     placedLabelRects.push({ x: x - 6, y: y - 6, w: 12, h: 12 });
   }
   for (const segment of projectedSegments) {
+    if (!isPinned(state, segment.id)) continue;
+    const [x, y] = segment.points[Math.round((segment.points.length - 1) / 2)];
+    placedLabelRects.push({ x: x - 8, y: y - 8, w: 16, h: 16 });
+  }
+  for (const segment of projectedSegments) {
     if (!isExplored(state, segment.id)) continue;
     const names = streetNamesFor(segment.id);
     const width = ctx.measureText(names.street).width;
@@ -346,9 +376,129 @@ function render() {
     drawStationMarker(x, y, station.lines);
   }
 
+  // R11: a selected segment (clicked while already explored, to pin/rate/
+  // unpin it) gets a dashed highlight so it's clear which one the panel
+  // below refers to.
+  if (selectedId !== null) {
+    const selected = projectedSegments.find((segment) => segment.id === selectedId);
+    if (selected) {
+      tracePath(selected.points);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#f5a623";
+      ctx.setLineDash([4, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  // R11/R12: pinned places get a star marker on top of everything else,
+  // same final-layer treatment as landmark dots and station markers, so a
+  // pin is never visually lost under a road or label.
+  for (const segment of projectedSegments) {
+    if (!isPinned(state, segment.id)) continue;
+    const [x, y] = segment.points[Math.round((segment.points.length - 1) / 2)];
+    drawPinMarker(x, y, ratingFor(state, segment.id));
+  }
+
   status.textContent = state.start
-    ? `Explored ${state.explored.size} segment(s).`
+    ? `Explored ${state.explored.size} segment(s), pinned ${state.pins.size} place(s).`
     : "Click a street to start exploring.";
+
+  renderPlacesList();
+  renderPanel();
+}
+
+// R11-R13: a list of every pinned place, highest-rated first, so the user
+// can review their favorites without clicking through the whole map.
+// Clicking an entry selects it, which opens the same pin/rate/unpin panel
+// a canvas click would.
+function renderPlacesList() {
+  placesList.replaceChildren();
+
+  const places = pinnedPlaces(state);
+  if (places.length === 0) return;
+
+  const heading = document.createElement("h2");
+  heading.textContent = "My places";
+  placesList.appendChild(heading);
+
+  const list = document.createElement("ul");
+  for (const place of places) {
+    const names = streetNamesFor(place.id);
+    const stars = place.rating === null
+      ? "unrated"
+      : "★".repeat(place.rating) + "☆".repeat(5 - place.rating);
+
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.textContent = names
+      ? `${names.street} (${names.crossFrom ?? "?"} to ${names.crossTo ?? "?"}) — ${stars}`
+      : `${place.id} — ${stars}`;
+    button.addEventListener("click", () => {
+      selectedId = place.id;
+      render();
+    });
+    item.appendChild(button);
+    list.appendChild(item);
+  }
+  placesList.appendChild(list);
+}
+
+// R11-R13: the panel below the canvas for pinning the selected segment,
+// rating it, or removing an existing pin.
+function renderPanel() {
+  placePanel.replaceChildren();
+
+  if (selectedId === null) {
+    const hint = document.createElement("p");
+    hint.textContent = "Click an explored street to pin it as a place.";
+    placePanel.appendChild(hint);
+    return;
+  }
+
+  const names = streetNamesFor(selectedId);
+  const title = document.createElement("p");
+  title.textContent = names
+    ? `${names.street} (${names.crossFrom ?? "?"} to ${names.crossTo ?? "?"})`
+    : selectedId;
+  placePanel.appendChild(title);
+
+  if (!isPinned(state, selectedId)) {
+    const pinButton = document.createElement("button");
+    pinButton.textContent = "Pin this place";
+    pinButton.addEventListener("click", () => {
+      state = pinPlace(state, selectedId);
+      saveState(state);
+      render();
+    });
+    placePanel.appendChild(pinButton);
+    return;
+  }
+
+  const currentRating = ratingFor(state, selectedId);
+  const stars = document.createElement("div");
+  stars.className = "stars";
+  for (let star = 1; star <= 5; star++) {
+    const starButton = document.createElement("button");
+    starButton.textContent = currentRating !== null && star <= currentRating ? "★" : "☆";
+    starButton.addEventListener("click", () => {
+      state = ratePlace(state, selectedId, star);
+      saveState(state);
+      render();
+    });
+    stars.appendChild(starButton);
+  }
+  placePanel.appendChild(stars);
+
+  const unpinButton = document.createElement("button");
+  unpinButton.textContent = "Remove pin";
+  unpinButton.addEventListener("click", () => {
+    state = unpinPlace(state, selectedId);
+    selectedId = null;
+    saveState(state);
+    render();
+  });
+  placePanel.appendChild(unpinButton);
 }
 
 // Distance from point p to the segment [a, b], for hit-testing clicks
@@ -389,8 +539,15 @@ canvas.addEventListener("click", (event) => {
   const id = nearestSegmentId(point);
   if (id === null) return;
 
-  state = state.start === null ? setStartLocation(state, id) : markExplored(state, id);
-  saveState(state);
+  // R11: clicking a street that's already explored selects it for pinning
+  // instead of re-marking it explored (a no-op anyway); clicking an
+  // unexplored street still sets the start location or explores it.
+  if (isExplored(state, id)) {
+    selectedId = id;
+  } else {
+    state = state.start === null ? setStartLocation(state, id) : markExplored(state, id);
+    saveState(state);
+  }
   render();
 });
 

@@ -12,3 +12,64 @@ canvas {
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
+
+#placesList {
+  margin: 16px auto 0;
+  max-width: 720px;
+  text-align: left;
+}
+
+#placesList h2 {
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+
+#placesList ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#placesList li {
+  margin-bottom: 4px;
+}
+
+#placesList button {
+  width: 100%;
+  text-align: left;
+  font-size: 0.95rem;
+  padding: 6px 10px;
+  background: #2a2a2a;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#placesList button:hover {
+  background: #353535;
+}
+
+#placePanel {
+  margin: 12px auto;
+  max-width: 720px;
+}
+
+#placePanel button {
+  font-size: 1rem;
+  margin: 2px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+#placePanel .stars {
+  display: inline-block;
+}
+
+#placePanel .stars button {
+  font-size: 1.3rem;
+  background: none;
+  border: none;
+  color: #f5a623;
+  padding: 0 2px;
+}
