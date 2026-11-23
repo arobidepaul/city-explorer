@@ -4,54 +4,61 @@ import {
   createState, setStartLocation, markExplored, isExplored,
   serializeState, deserializeState,
 } from "./cityState.js";
-import { streetNamesFor, blockId } from "./cityData.js";
+import { SEGMENTS, streetNamesFor } from "./cityData.js";
+
+const [segmentA, segmentB, segmentC] = SEGMENTS;
 
 test("R2: setting a start location marks it explored", () => {
   let state = createState();
-  state = setStartLocation(state, blockId(3, 4));
-  assert.equal(state.start, "3,4");
-  assert.ok(isExplored(state, "3,4"));
+  state = setStartLocation(state, segmentA.id);
+  assert.equal(state.start, segmentA.id);
+  assert.ok(isExplored(state, segmentA.id));
 });
 
 test("R2: start location can only be set once", () => {
   let state = createState();
-  state = setStartLocation(state, blockId(0, 0));
-  state = setStartLocation(state, blockId(5, 5));
-  assert.equal(state.start, "0,0");
-  assert.ok(!isExplored(state, "5,5"));
+  state = setStartLocation(state, segmentA.id);
+  state = setStartLocation(state, segmentB.id);
+  assert.equal(state.start, segmentA.id);
+  assert.ok(!isExplored(state, segmentB.id));
 });
 
-test("R3: marking a block explored reveals only that block", () => {
+test("R3: marking a segment explored reveals only that segment", () => {
   let state = createState();
-  state = markExplored(state, blockId(1, 1));
-  assert.ok(isExplored(state, "1,1"));
-  assert.ok(!isExplored(state, "2,2"));
+  state = markExplored(state, segmentA.id);
+  assert.ok(isExplored(state, segmentA.id));
+  assert.ok(!isExplored(state, segmentB.id));
 });
 
-test("R3: marking explored does not clear earlier explored blocks", () => {
+test("R3: marking explored does not clear earlier explored segments", () => {
   let state = createState();
-  state = markExplored(state, blockId(1, 1));
-  state = markExplored(state, blockId(2, 2));
-  assert.ok(isExplored(state, "1,1"));
-  assert.ok(isExplored(state, "2,2"));
+  state = markExplored(state, segmentA.id);
+  state = markExplored(state, segmentB.id);
+  assert.ok(isExplored(state, segmentA.id));
+  assert.ok(isExplored(state, segmentB.id));
 });
 
-test("R4: street names are derived from a block's row and column", () => {
-  const names = streetNamesFor(blockId(2, 3));
-  assert.equal(names.eastWest, "Adams St");
-  assert.equal(names.northSouth, "LaSalle St");
+test("R4: street names are looked up from a segment's id", () => {
+  const names = streetNamesFor(segmentA.id);
+  assert.equal(names.street, segmentA.street);
+  assert.equal(names.crossFrom, segmentA.crossFrom);
+  assert.equal(names.crossTo, segmentA.crossTo);
+});
+
+test("R4: an unknown segment id has no street names", () => {
+  assert.equal(streetNamesFor("not-a-real-id"), null);
 });
 
 test("R5: serializing and deserializing round-trips explored state", () => {
   let state = createState();
-  state = setStartLocation(state, blockId(0, 0));
-  state = markExplored(state, blockId(1, 0));
+  state = setStartLocation(state, segmentA.id);
+  state = markExplored(state, segmentB.id);
   const json = serializeState(state);
   const restored = deserializeState(json);
-  assert.equal(restored.start, "0,0");
-  assert.ok(isExplored(restored, "0,0"));
-  assert.ok(isExplored(restored, "1,0"));
-  assert.ok(!isExplored(restored, "9,9"));
+  assert.equal(restored.start, segmentA.id);
+  assert.ok(isExplored(restored, segmentA.id));
+  assert.ok(isExplored(restored, segmentB.id));
+  assert.ok(!isExplored(restored, segmentC.id));
 });
 
 test("R5: a fresh deserialized state is a real Set, not an array", () => {

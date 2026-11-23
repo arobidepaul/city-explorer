@@ -1,4 +1,4 @@
-import { ROWS, COLS, blockId, streetNamesFor } from "./cityData.js";
+import { SEGMENTS, RIVER, LAKE_MICHIGAN_SHORELINE, LAKE_MICHIGAN_BREAKWATERS, PARKS, LANDMARKS, STATIONS, CTA_LINE_COLORS, BOUNDS, streetNamesFor } from "./cityData.js";
 import {
   createState, setStartLocation, markExplored, isExplored,
   serializeState, deserializeState,
@@ -8,7 +8,83 @@ const STORAGE_KEY = "city-explorer-state";
 const canvas = document.getElementById("map");
 const ctx = canvas.getContext("2d");
 const status = document.getElementById("status");
-const cellSize = canvas.width / COLS;
+
+// R7: the whole area is shown at a fixed scale, no pan/zoom. Project lon/lat
+// to canvas pixels once, correcting for longitude compression at this
+// latitude, and fit the full bounding box inside the canvas with padding.
+const PADDING = 20;
+const avgLatRad = ((BOUNDS.minLat + BOUNDS.maxLat) / 2) * (Math.PI / 180);
+const lonScale = Math.cos(avgLatRad);
+const spanX = (BOUNDS.maxLon - BOUNDS.minLon) * lonScale;
+const spanY = BOUNDS.maxLat - BOUNDS.minLat;
+const scale = Math.min(
+  (canvas.width - 2 * PADDING) / spanX,
+  (canvas.height - 2 * PADDING) / spanY,
+);
+
+function project([lon, lat]) {
+  const x = PADDING + (lon - BOUNDS.minLon) * lonScale * scale;
+  const y = PADDING + (BOUNDS.maxLat - lat) * scale;
+  return [x, y];
+}
+
+const projectedSegments = SEGMENTS.map((segment) => ({
+  id: segment.id,
+  points: segment.coords.map(project),
+}));
+
+const projectedRiver = RIVER.map((piece) => piece.map(project));
+
+// Lake Michigan: everything east of the real shoreline, out past the edge of
+// the canvas, is water. Close the shoreline polyline into a fillable shape by
+// running it out to a point off the right edge of the canvas and back.
+const projectedShoreline = LAKE_MICHIGAN_SHORELINE.map(project);
+const projectedBreakwaters = LAKE_MICHIGAN_BREAKWATERS.map((ring) => ring.map(project));
+const LAKE_RIGHT_EDGE = canvas.width + 40;
+
+// Parks: each entry is [outer ring, ...hole rings], same shape as a GeoJSON
+// MultiPolygon part.
+const projectedParks = PARKS.map((rings) => rings.map((ring) => ring.map(project)));
+
+// R8: landmarks are reference points only -- not explorable, always shown.
+const projectedLandmarks = LANDMARKS.map((landmark) => ({
+  name: landmark.name,
+  point: project([landmark.lon, landmark.lat]),
+}));
+
+// R9: CTA 'L' stations, same reference-point treatment as landmarks.
+const projectedStations = STATIONS.map((station) => ({
+  name: station.name,
+  lines: station.lines,
+  point: project([station.lon, station.lat]),
+}));
+
+// Dead ends: a short tick perpendicular to the road's own direction at the
+// exact point it stops, for streets the source data tags as a genuine
+// real-world dead end (not just an untracked alley or our map's edge).
+function perpendicularCap(end, prev) {
+  const [ex, ey] = end;
+  const [px, py] = prev;
+  let dx = ex - px;
+  let dy = ey - py;
+  const length = Math.hypot(dx, dy) || 1;
+  dx /= length;
+  dy /= length;
+  const nx = -dy * 7;
+  const ny = dx * 7;
+  return { x1: ex + nx, y1: ey + ny, x2: ex - nx, y2: ey - ny };
+}
+
+const deadEndCaps = [];
+SEGMENTS.forEach((segment, i) => {
+  const points = projectedSegments[i].points;
+  if (segment.deadEndFrom) {
+    deadEndCaps.push(perpendicularCap(points[0], points[1]));
+  }
+  if (segment.deadEndTo) {
+    deadEndCaps.push(perpendicularCap(points[points.length - 1], points[points.length - 2]));
+  }
+});
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -26,34 +102,292 @@ function saveState(state) {
 
 let state = loadState();
 
+const LABEL_FONT = "600 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const LANDMARK_FONT = "italic 600 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const STATION_FONT = "600 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+
+function drawStationMarker(x, y, lines) {
+  const radius = 5;
+  const slice = (Math.PI * 2) / lines.length;
+  lines.forEach((line, i) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.arc(x, y, radius, i * slice - Math.PI / 2, (i + 1) * slice - Math.PI / 2);
+    ctx.closePath();
+    ctx.fillStyle = CTA_LINE_COLORS[line] || "#555555";
+    ctx.fill();
+  });
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke();
+}
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function tracePath(points) {
+  ctx.beginPath();
+  points.forEach(([x, y], i) => {
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+}
+
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (let row = 0; row < ROWS; row++) {
-    for (let col = 0; col < COLS; col++) {
-      const id = blockId(row, col);
-      const explored = isExplored(state, id);
-      ctx.fillStyle = explored ? "#4caf50" : "#888";
-      ctx.fillRect(col * cellSize, row * cellSize, cellSize - 1, cellSize - 1);
+  ctx.fillStyle = "#e8e4d9";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
 
-      if (explored) {
-        const { eastWest, northSouth } = streetNamesFor(id);
-        ctx.fillStyle = "#000";
-        ctx.font = "7px sans-serif";
-        ctx.fillText(northSouth.split(" ")[0], col * cellSize + 2, row * cellSize + 12);
-        ctx.fillText(eastWest.split(" ")[0], col * cellSize + 2, row * cellSize + 22);
+  // Decorative: real park boundaries (Grant Park and several South Loop
+  // pocket parks), filled over the plain land color so the big green spaces
+  // on a real map don't read as empty/missing. Streets draw on top, same as
+  // they do over the lake.
+  ctx.fillStyle = "#c7d9b8";
+  for (const rings of projectedParks) {
+    const path = new Path2D();
+    rings.forEach((ring) => {
+      ring.forEach(([x, y], i) => {
+        if (i === 0) path.moveTo(x, y);
+        else path.lineTo(x, y);
+      });
+      path.closePath();
+    });
+    ctx.fill(path, "evenodd");
+  }
+
+  // Decorative: Lake Michigan, filled first (bottom layer) so the river and
+  // streets draw on top of it, same as the land.
+  if (projectedShoreline.length > 0) {
+    ctx.beginPath();
+    projectedShoreline.forEach(([x, y], i) => {
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    const [, firstY] = projectedShoreline[0];
+    const [, lastY] = projectedShoreline[projectedShoreline.length - 1];
+    ctx.lineTo(LAKE_RIGHT_EDGE, lastY);
+    ctx.lineTo(LAKE_RIGHT_EDGE, firstY);
+    ctx.closePath();
+    ctx.fillStyle = "#aed4e6";
+    ctx.fill();
+  }
+
+  // Decorative: the Monroe Harbor breakwater, solid ground poking out of the
+  // lake. The source polygon is only a few meters wide, which fills to a
+  // near-invisible sliver at this scale, so it's stroked as a solid pier --
+  // a sandy tone clearly distinct from both the water and the plain land --
+  // thick enough to actually read as a real, deliberate feature.
+  ctx.fillStyle = "#e8e4d9";
+  ctx.strokeStyle = "#cdbb94";
+  ctx.lineWidth = 5;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (const ring of projectedBreakwaters) {
+    ctx.beginPath();
+    ring.forEach(([x, y], i) => {
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Decorative: the Chicago River, drawn beneath the streets so roads read
+  // as crossing over it on bridges, like a real map.
+  ctx.strokeStyle = "#a9d3e5";
+  ctx.lineWidth = 10;
+  for (const points of projectedRiver) {
+    tracePath(points);
+    ctx.stroke();
+  }
+
+  // R1: like a real map, a road is a light surface with a thin darker
+  // casing/outline -- lighter than the land, not darker. Unexplored roads
+  // stay neutral grayscale; once explored, the surface takes the map's
+  // route color, drawn thick enough that its name can sit directly on top.
+  for (const segment of projectedSegments) {
+    const explored = isExplored(state, segment.id);
+
+    tracePath(segment.points);
+    ctx.lineWidth = explored ? 11 : 6;
+    ctx.strokeStyle = explored ? "#145dc4" : "#c9c2b2";
+    ctx.stroke();
+
+    tracePath(segment.points);
+    ctx.lineWidth = explored ? 8 : 3.5;
+    ctx.strokeStyle = explored ? "#2f86f5" : "#fbfaf5";
+    ctx.stroke();
+  }
+
+  // A real dead end gets a small barrier tick across the end of the road,
+  // so it reads as "the street really stops here" rather than a rendering
+  // glitch or a cut-off edge of the map.
+  ctx.strokeStyle = "#6b5a46";
+  ctx.lineWidth = 3;
+  for (const cap of deadEndCaps) {
+    ctx.beginPath();
+    ctx.moveTo(cap.x1, cap.y1);
+    ctx.lineTo(cap.x2, cap.y2);
+    ctx.stroke();
+  }
+
+  // R4: street names, drawn directly on their (now thick) road. Labels can
+  // still crowd each other near intersections or on short blocks, so each
+  // one tries a few spots along its own segment and skips drawing entirely
+  // rather than overlap an already-placed label.
+  ctx.font = LABEL_FONT;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#145dc4";
+  ctx.fillStyle = "#ffffff";
+  ctx.textBaseline = "middle";
+  const placedLabelRects = [];
+  const LABEL_SPOTS = [0.5, 0.25, 0.75, 0.1, 0.9];
+
+  // Reserve space around every landmark dot before any text is placed, so a
+  // street (or landmark) label can never paint over a dot drawn earlier --
+  // canvas has no z-index, only paint order, so this has to happen up front.
+  for (const landmark of projectedLandmarks) {
+    const [x, y] = landmark.point;
+    placedLabelRects.push({ x: x - 5, y: y - 5, w: 10, h: 10 });
+  }
+  for (const station of projectedStations) {
+    const [x, y] = station.point;
+    placedLabelRects.push({ x: x - 6, y: y - 6, w: 12, h: 12 });
+  }
+  for (const segment of projectedSegments) {
+    if (!isExplored(state, segment.id)) continue;
+    const names = streetNamesFor(segment.id);
+    const width = ctx.measureText(names.street).width;
+
+    for (const fraction of LABEL_SPOTS) {
+      const index = Math.round(fraction * (segment.points.length - 1));
+      const [x, y] = segment.points[index];
+      const textX = x - width / 2;
+      const rect = { x: textX, y: y - 7, w: width, h: 14 };
+      if (placedLabelRects.some((placed) => rectsOverlap(placed, rect))) continue;
+      ctx.strokeText(names.street, textX, y);
+      ctx.fillText(names.street, textX, y);
+      placedLabelRects.push(rect);
+      break;
+    }
+  }
+
+  // R8: landmark labels, always shown. They share the street labels' overlap
+  // check (including each dot's own reserved space above) so a landmark
+  // label never collides with a nearby street name or a dot.
+  ctx.font = LANDMARK_FONT;
+  ctx.textBaseline = "middle";
+  const LANDMARK_LABEL_OFFSETS = [
+    [8, 0], [-8, 0], [0, -10], [0, 10],
+  ];
+  for (const landmark of projectedLandmarks) {
+    const [x, y] = landmark.point;
+    const width = ctx.measureText(landmark.name).width;
+    for (const [dx, dy] of LANDMARK_LABEL_OFFSETS) {
+      const textX = dx >= 0 ? x + 8 : x - 8 - width;
+      const textY = y + dy;
+      const rect = { x: textX, y: textY - 7, w: width, h: 14 };
+      if (placedLabelRects.some((placed) => rectsOverlap(placed, rect))) continue;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#e8e4d9";
+      ctx.fillStyle = "#8a2d2d";
+      ctx.strokeText(landmark.name, textX, textY);
+      ctx.fillText(landmark.name, textX, textY);
+      placedLabelRects.push(rect);
+      break;
+    }
+  }
+
+  // R9: CTA station labels, same reservation-based overlap handling.
+  ctx.font = STATION_FONT;
+  ctx.textBaseline = "middle";
+  const STATION_LABEL_OFFSETS = [
+    [9, 0], [-9, 0], [0, -11], [0, 11],
+  ];
+  for (const station of projectedStations) {
+    const [x, y] = station.point;
+    const width = ctx.measureText(station.name).width;
+    for (const [dx, dy] of STATION_LABEL_OFFSETS) {
+      const textX = dx >= 0 ? x + 9 : x - 9 - width;
+      const textY = y + dy;
+      const rect = { x: textX, y: textY - 7, w: width, h: 14 };
+      if (placedLabelRects.some((placed) => rectsOverlap(placed, rect))) continue;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#e8e4d9";
+      ctx.fillStyle = "#2b2b2b";
+      ctx.strokeText(station.name, textX, textY);
+      ctx.fillText(station.name, textX, textY);
+      placedLabelRects.push(rect);
+      break;
+    }
+  }
+
+  // Landmark dots and station markers are drawn last of all, on top of every
+  // road and every label, so neither is ever visually lost under something
+  // painted after it.
+  for (const landmark of projectedLandmarks) {
+    const [x, y] = landmark.point;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#8a2d2d";
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+  }
+  for (const station of projectedStations) {
+    const [x, y] = station.point;
+    drawStationMarker(x, y, station.lines);
+  }
+
+  status.textContent = state.start
+    ? `Explored ${state.explored.size} segment(s).`
+    : "Click a street to start exploring.";
+}
+
+// Distance from point p to the segment [a, b], for hit-testing clicks
+// against thin street lines rather than filled grid cells.
+function distanceToSegment(p, a, b) {
+  const [px, py] = p;
+  const [ax, ay] = a;
+  const [bx, by] = b;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSquared = dx * dx + dy * dy;
+  let t = lengthSquared === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / lengthSquared;
+  t = Math.max(0, Math.min(1, t));
+  const closestX = ax + t * dx;
+  const closestY = ay + t * dy;
+  return Math.hypot(px - closestX, py - closestY);
+}
+
+function nearestSegmentId(point) {
+  let bestId = null;
+  let bestDistance = Infinity;
+  for (const segment of projectedSegments) {
+    for (let i = 0; i < segment.points.length - 1; i++) {
+      const distance = distanceToSegment(point, segment.points[i], segment.points[i + 1]);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestId = segment.id;
       }
     }
   }
-  status.textContent = state.start
-    ? `Explored ${state.explored.size} block(s).`
-    : "Click a block to start exploring.";
+  const CLICK_THRESHOLD_PX = 10;
+  return bestDistance <= CLICK_THRESHOLD_PX ? bestId : null;
 }
 
 canvas.addEventListener("click", (event) => {
   const rect = canvas.getBoundingClientRect();
-  const col = Math.floor((event.clientX - rect.left) / cellSize);
-  const row = Math.floor((event.clientY - rect.top) / cellSize);
-  const id = blockId(row, col);
+  const point = [event.clientX - rect.left, event.clientY - rect.top];
+  const id = nearestSegmentId(point);
+  if (id === null) return;
 
   state = state.start === null ? setStartLocation(state, id) : markExplored(state, id);
   saveState(state);

@@ -6,6 +6,9 @@ body {
 }
 
 canvas {
-  border: 1px solid #555;
+  background: #f4efe4;
+  border: none;
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
